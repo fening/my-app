@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/use-toast"
 import { useState } from "react"
 import { canMakeRequest, recordRequest, getRemainingCooldownTime } from "@/lib/request-limiter"
-import { motion } from "framer-motion"
 import { Phone } from "lucide-react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 
@@ -171,12 +170,7 @@ export default function AirtimeForm() {
                 />
               </div>
               
-              <motion.div
-                className="pt-2"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-              >
+              <div className="pt-2 transition-opacity opacity-100">
                 <Button 
                   type="submit" 
                   disabled={isSubmitting}
@@ -191,16 +185,11 @@ export default function AirtimeForm() {
                     "Send Airtime"
                   )}
                 </Button>
-              </motion.div>
+              </div>
             </form>
           </Form>
         ) : (
-          <motion.div 
-            className="flex flex-col items-center justify-center py-6"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3 }}
-          >
+          <div className="flex flex-col items-center justify-center py-6 transition-all duration-300">
             <div className="rounded-full bg-green-100 p-3 mb-4">
               <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -216,13 +205,13 @@ export default function AirtimeForm() {
             >
               Send Another
             </Button>
-          </motion.div>
+          </div>
         )}
       </CardContent>
       
       <CardFooter className="border-t px-6 py-3 bg-gray-50 flex justify-center rounded-b-lg">
         <p className="text-xs text-gray-500">
-          Maximum one airtime request per number every 24 hours
+          Thank you for your support.
         </p>
       </CardFooter>
     </Card>
