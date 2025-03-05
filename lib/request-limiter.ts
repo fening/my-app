@@ -3,92 +3,72 @@
  * from the same user within a specific time period
  */
 
-const COOLDOWN_TIME = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+// Constants
+const COOLDOWN_PERIOD = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+const STORAGE_PREFIX = 'request_timestamp_';
 
-interface RequestRecord {
-  recipient: string;
-  timestamp: number;
-}
-
+/**
+ * Check if a request can be made to the specified recipient
+ * @param recipient The recipient identifier
+ * @returns Boolean indicating if request can be made
+ */
 export function canMakeRequest(recipient: string): boolean {
-  // Don't run on server
-  if (typeof window === 'undefined') return true;
+  const lastRequestTime = getLastRequestTime(recipient);
   
-  try {
-    // Get previous requests
-    const requestsJson = localStorage.getItem('airtime_requests');
-    const requests: RequestRecord[] = requestsJson ? JSON.parse(requestsJson) : [];
-    
-    // Current time
-    const now = Date.now();
-    
-    // Filter out expired records
-    const validRequests = requests.filter(req => now - req.timestamp < COOLDOWN_TIME);
-    
-    // Check if this recipient already has a recent request
-    const hasRecentRequest = validRequests.some(req => req.recipient === recipient);
-    
-    // If no recent request, it's allowed
-    return !hasRecentRequest;
-  } catch (error) {
-    console.error('Error checking request limit:', error);
-    // In case of error, allow the request
+  // If no previous request or cooldown period has passed
+  if (!lastRequestTime) {
     return true;
   }
+  
+  const currentTime = Date.now();
+  const timeSinceLastRequest = currentTime - lastRequestTime;
+  
+  return timeSinceLastRequest > COOLDOWN_PERIOD;
 }
 
+/**
+ * Records that a request has been made to the specified recipient
+ * @param recipient The recipient identifier
+ */
 export function recordRequest(recipient: string): void {
-  // Don't run on server
-  if (typeof window === 'undefined') return;
-  
-  try {
-    // Get existing records
-    const requestsJson = localStorage.getItem('airtime_requests');
-    const requests: RequestRecord[] = requestsJson ? JSON.parse(requestsJson) : [];
-    
-    // Current time
-    const now = Date.now();
-    
-    // Filter out expired records
-    const validRequests = requests.filter(req => now - req.timestamp < COOLDOWN_TIME);
-    
-    // Add new record
-    validRequests.push({
-      recipient,
-      timestamp: now
-    });
-    
-    // Save back to localStorage
-    localStorage.setItem('airtime_requests', JSON.stringify(validRequests));
-  } catch (error) {
-    console.error('Error recording request:', error);
-  }
+  const currentTime = Date.now();
+  localStorage.setItem(getStorageKey(recipient), currentTime.toString());
 }
 
-export function getRemainingCooldownTime(recipient: string): number | null {
-  // Don't run on server
-  if (typeof window === 'undefined') return null;
+/**
+ * Gets the remaining cooldown time in milliseconds
+ * @param recipient The recipient identifier
+ * @returns Remaining time in milliseconds, or 0 if no cooldown is active
+ */
+export function getRemainingCooldownTime(recipient: string): number {
+  const lastRequestTime = getLastRequestTime(recipient);
   
-  try {
-    // Get previous requests
-    const requestsJson = localStorage.getItem('airtime_requests');
-    const requests: RequestRecord[] = requestsJson ? JSON.parse(requestsJson) : [];
-    
-    // Current time
-    const now = Date.now();
-    
-    // Find request for this recipient
-    const request = requests.find(req => req.recipient === recipient);
-    
-    if (!request) return null;
-    
-    // Calculate remaining time
-    const elapsed = now - request.timestamp;
-    const remaining = COOLDOWN_TIME - elapsed;
-    
-    return remaining > 0 ? remaining : null;
-  } catch (error) {
-    console.error('Error getting cooldown time:', error);
-    return null;
+  if (!lastRequestTime) {
+    return 0;
   }
+  
+  const currentTime = Date.now();
+  const timeSinceLastRequest = currentTime - lastRequestTime;
+  const remainingTime = COOLDOWN_PERIOD - timeSinceLastRequest;
+  
+  return remainingTime > 0 ? remainingTime : 0;
+}
+
+/**
+ * Helper function to get the last request time
+ * @param recipient The recipient identifier
+ * @returns Timestamp of last request or null if no request was made
+ */
+function getLastRequestTime(recipient: string): number | null {
+  const value = localStorage.getItem(getStorageKey(recipient));
+  return value ? parseInt(value, 10) : null;
+}
+
+/**
+ * Helper function to generate the storage key
+ * @param recipient The recipient identifier
+ * @returns The storage key
+ */
+function getStorageKey(recipient: string): string {
+  return `${STORAGE_PREFIX}${recipient}`;
 }

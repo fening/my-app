@@ -1,7 +1,7 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm as useHookForm } from "react-hook-form"
+import { useForm as useHookForm, Controller } from "react-hook-form"
 import type { ControllerRenderProps, FieldValues } from "react-hook-form"
 import * as z from "zod"
 import { Button } from "@/components/ui/button"
@@ -21,12 +21,18 @@ const formSchema = z.object({
 // Use type for the form values
 type FormValues = z.infer<typeof formSchema>;
 
+// Add this type definition for your form
+type AirtimeFormValues = {
+  recipient: string;
+  // Add other form fields as needed
+};
+
 export default function AirtimeForm() {
   const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   
   // Change useForm to useHookForm to match the import
-  const form = useHookForm<FormValues>({
+  const form = useHookForm<AirtimeFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       recipient: "",
@@ -97,10 +103,10 @@ export default function AirtimeForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-        <FormField
+        <Controller
           control={form.control}
           name="recipient"
-          render={({ field }: { field: ControllerRenderProps<FieldValues, "recipient"> }) => (
+          render={({ field, fieldState, formState }) => (
             <FormItem>
               <FormLabel>Phone Number</FormLabel>
               <FormControl>
