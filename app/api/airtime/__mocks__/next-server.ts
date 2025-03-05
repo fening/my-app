@@ -2,14 +2,14 @@
 
 export class NextResponse {
   public status: number;
-  public body: any;
+  public body: unknown;
 
-  constructor(body: any, init: { status: number }) {
+  constructor(body: unknown, init: { status: number }) {
     this.body = body;
     this.status = init.status;
   }
 
-  static json(body: any, init: { status: number } = { status: 200 }) {
+  static json(body: unknown, init: { status: number } = { status: 200 }) {
     return new NextResponse(body, init);
   }
 

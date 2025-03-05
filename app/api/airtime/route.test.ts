@@ -1,9 +1,30 @@
 import { POST } from './route';
 
-// Mock next/server
-jest.mock('next/server', () => {
-  return require('./__mocks__/next-server');
-});
+// Mock next/server using Jest's auto mocking
+jest.mock('next/server', () => ({
+  NextResponse: {
+    json: (body: unknown, init = { status: 200 }) => ({
+      status: init.status,
+      body,
+      json: async () => body
+    })
+  },
+  NextRequest: class {
+    private url: string;
+    private method: string;
+    private bodyContent: string;
+
+    constructor(url: string, options: { method: string; body?: string }) {
+      this.url = url;
+      this.method = options.method;
+      this.bodyContent = options.body || '{}';
+    }
+
+    json() {
+      return Promise.resolve(JSON.parse(this.bodyContent));
+    }
+  }
+}));
 
 import { NextRequest } from 'next/server';
 
