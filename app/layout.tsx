@@ -1,6 +1,5 @@
-import type { Metadata } from "next";
+import '@/styles/globals.css'
 import localFont from "next/font/local";
-import "./globals.css";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -13,23 +12,21 @@ const geistMono = localFont({
   weight: "100 900",
 });
 
+import { Metadata } from 'next'
+
 export const metadata: Metadata = {
-  title: "Send Airtime",
-  description: "Airtime app for sending airtime",
-};
+  title: 'Airtime Sharing App',
+  description: 'Send free airtime to phone numbers',
+}
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: {
+  children: React.ReactNode
+}) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-      </body>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>{children}</body>
     </html>
-  );
+  )
 }

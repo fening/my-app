@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/use-toast"
-import { useState } from "react"
-import { canMakeRequest, recordRequest, getRemainingCooldownTime } from "@/lib/request-limiter"
-import { Phone } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Phone, CheckCircle2, Zap, Gift } from "lucide-react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { motion, AnimatePresence } from "framer-motion"
 
 // Updated schema to only include recipient field
 const formSchema = z.object({
@@ -41,23 +41,22 @@ export default function AirtimeForm() {
     },
   })
 
+  // State for confetti animation
+  const [showConfetti, setShowConfetti] = useState(false)
+  
+  // Show confetti when success screen appears
+  useEffect(() => {
+    if (formStep === 1) {
+      setShowConfetti(true)
+      // Hide confetti after animation completes
+      const timer = setTimeout(() => setShowConfetti(false), 4000)
+      return () => clearTimeout(timer)
+    }
+  }, [formStep])
+
   async function onSubmit(values: FormValues) {
     try {
       setIsSubmitting(true)
-      
-      // Check if user can make a request
-      if (!canMakeRequest(values.recipient)) {
-        const remainingTime = getRemainingCooldownTime(values.recipient)
-        const hours = Math.ceil((remainingTime || 0) / (1000 * 60 * 60))
-        
-        toast({
-          variant: "destructive",
-          title: "Request Denied",
-          description: `This number already received airtime. Try again in ${hours} hours.`,
-        })
-        setIsSubmitting(false)
-        return
-      }
       
       // Simulate request delay for better UX
       await new Promise(resolve => setTimeout(resolve, 1500))
@@ -79,9 +78,6 @@ export default function AirtimeForm() {
       const result = await response.json()
 
       if (result.success) {
-        // Record the successful request
-        recordRequest(values.recipient)
-        
         // Show success step
         setFormStep(1)
         
@@ -91,11 +87,20 @@ export default function AirtimeForm() {
         })
         // Don't reset form immediately so user can see success state
       } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: result.message,
-        })
+        // Handle different error scenarios
+        if (response.status === 403) {
+          toast({
+            variant: "destructive",
+            title: "Request Denied",
+            description: "This number has already received airtime and is not eligible for more.",
+          })
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: result.message || "An error occurred while sending airtime.",
+          })
+        }
       }
     } catch (err) {
       toast({
@@ -113,104 +118,224 @@ export default function AirtimeForm() {
     setFormStep(0)
   }
 
-  // Format phone number as user types
+  // Format phone number as user types - updated to add leading zero and format with spaces
   function formatPhoneNumber(value: string) {
     // Remove all non-digits
-    const digits = value.replace(/\D/g, '')
+    let digits = value.replace(/\D/g, '')
+    
+    // Add leading zero if not present
+    if (digits.length > 0 && !digits.startsWith('0')) {
+      digits = '0' + digits;
+    }
     
     // Apply formatting based on length
-    if (digits.length <= 3) {
+    if (digits.length <= 4) {
       return digits
-    } else if (digits.length <= 6) {
-      return `${digits.slice(0, 3)} ${digits.slice(3)}`
+    } else if (digits.length <= 7) {
+      return `${digits.slice(0, 4)} ${digits.slice(4)}`
     } else {
-      return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 10)}`
+      return `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`
     }
   }
 
   return (
-    <Card className="w-full max-w-md mx-auto shadow-lg border-0">
-      <CardHeader className="space-y-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-t-lg">
-        <CardTitle className="text-2xl font-bold text-center">Send Airtime</CardTitle>
-        <CardDescription className="text-blue-100 text-center">Enter a phone number to receive free airtime</CardDescription>
+    <Card className="w-full max-w-md mx-auto shadow-md border rounded-lg overflow-hidden">
+      <CardHeader className="space-y-1 bg-gray-50 border-b">
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <CardTitle className="text-3xl font-bold text-center mb-2">Receive your free airtime</CardTitle>
+          <CardDescription className="text-gray-500 text-center text-lg">
+            Enter a phone number to receive free airtime
+          </CardDescription>
+        </motion.div>
       </CardHeader>
       
-      <CardContent className="p-6">
-        {formStep === 0 ? (
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="space-y-4">
-                <Controller
-                  control={form.control}
-                  name="recipient"
-                  render={({ field, fieldState, formState }) => (
-                    <FormItem>
-                      <FormLabel className="text-base font-medium">Phone Number</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 h-4 w-4" />
-                          <Input
-                            placeholder="Enter phone number"
-                            className="pl-10 h-12 text-lg"
-                            {...field}
-                            onChange={e => {
-                              const formatted = formatPhoneNumber(e.target.value)
-                              field.onChange(formatted)
-                            }}
-                            disabled={isSubmitting}
-                          />
-                        </div>
-                      </FormControl>
-                      <FormDescription className="text-sm text-gray-500">
-                        Enter the phone number to receive the airtime
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              
-              <div className="pt-2 transition-opacity opacity-100">
-                <Button 
-                  type="submit" 
-                  disabled={isSubmitting}
-                  className="w-full h-12 text-base font-medium bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 transition-all duration-300"
-                >
-                  {isSubmitting ? (
-                    <div className="flex items-center gap-2">
-                      <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      <span>Sending Airtime...</span>
-                    </div>
-                  ) : (
-                    "Send Airtime"
-                  )}
-                </Button>
-              </div>
-            </form>
-          </Form>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-6 transition-all duration-300">
-            <div className="rounded-full bg-green-100 p-3 mb-4">
-              <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-1">Airtime Sent!</h3>
-            <p className="text-gray-500 text-center mb-6">
-              Your airtime has been sent successfully to {form.getValues().recipient}.
-            </p>
-            <Button 
-              onClick={resetForm}
-              className="bg-gray-100 text-gray-800 hover:bg-gray-200"
+      <CardContent className="p-8 bg-white">
+        <AnimatePresence mode="wait">
+          {formStep === 0 ? (
+            <motion.div
+              key="form"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ delay: 0.2, duration: 0.5 }}
             >
-              Send Another
-            </Button>
-          </div>
-        )}
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                  <div className="space-y-4">
+                    <Controller
+                      control={form.control}
+                      name="recipient"
+                      render={({ field, fieldState, formState }) => (
+                        <FormItem>
+                          <FormLabel className="text-lg font-medium">Phone Number</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Phone className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500 h-5 w-5" />
+                              <Input
+                                placeholder="Enter phone number"
+                                className="pl-12 h-16 text-xl rounded-md border-gray-300 focus:border-gray-500 focus:ring-gray-500 shadow-sm"
+                                {...field}
+                                onChange={e => {
+                                  const formatted = formatPhoneNumber(e.target.value)
+                                  field.onChange(formatted)
+                                }}
+                                disabled={isSubmitting}
+                              />
+                            </div>
+                          </FormControl>
+                          <FormDescription className="text-base text-gray-500">
+                            You can receive this airtime only once
+                          </FormDescription>
+                          <FormMessage className="text-base" />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  
+                  <div className="pt-4 transition-opacity opacity-100">
+                    <Button 
+                      type="submit" 
+                      disabled={isSubmitting}
+                      className="w-full h-16 text-lg font-medium bg-gray-800 hover:bg-gray-700 text-white rounded-md transition-all duration-300 shadow-sm"
+                    >
+                      {isSubmitting ? (
+                        <div className="flex items-center gap-3">
+                          <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>Sending Airtime...</span>
+                        </div>
+                      ) : (
+                        "Send Airtime"
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="success"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+              className="relative py-8"
+            >
+              {/* Confetti animation with simple colors */}
+              {showConfetti && (
+                <div className="absolute inset-0 pointer-events-none">
+                  {[...Array(50)].map((_, i) => (
+                    <motion.div
+                      key={i}
+                      className="absolute"
+                      initial={{
+                        top: "0%",
+                        left: `${Math.random() * 100}%`,
+                        opacity: 1,
+                        scale: Math.random() * 0.5 + 0.5,
+                      }}
+                      animate={{
+                        top: "100%",
+                        left: `${Math.random() * 100}%`,
+                        opacity: 0,
+                      }}
+                      transition={{
+                        duration: Math.random() * 2 + 2,
+                        ease: "easeOut",
+                        delay: Math.random() * 0.5,
+                      }}
+                    >
+                      <div
+                        className="w-2 h-2 rounded-full"
+                        style={{
+                          backgroundColor: [
+                            "#E5E5E5", "#D4D4D4", "#A3A3A3", "#737373", "#525252", 
+                            "#404040", "#262626", "#171717", "#0F0F0F", "#000000"
+                          ][i % 10]
+                        }}
+                      ></div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+              
+              {/* Simplified success content */}
+              <div className="flex flex-col items-center justify-center transition-all duration-300 z-10 relative">
+                <motion.div
+                  initial={{ scale: 0, rotate: -180 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ 
+                    type: "spring", 
+                    damping: 12, 
+                    stiffness: 200,
+                    delay: 0.2
+                  }}
+                  className="rounded-full bg-gray-100 border border-gray-200 p-5 mb-6"
+                >
+                  <CheckCircle2 className="h-14 w-14 text-gray-800" />
+                </motion.div>
+                
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.6 }}
+                >
+                  <h3 className="text-3xl font-bold text-gray-900 mb-2 text-center">Airtime Sent!</h3>
+                </motion.div>
+                
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.8 }}
+                >
+                  <div className="flex items-center justify-center gap-2 mb-4 px-4 py-3 bg-gray-100 rounded-full text-gray-700">
+                    <Zap size={18} />
+                    <span className="font-medium">Transaction Successful</span>
+                  </div>
+                </motion.div>
+                
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 1 }}
+                  className="bg-gray-50 rounded-md border border-gray-200 p-4 mb-8 w-full"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-500">Recipient:</span>
+                    <span className="font-bold text-lg">{form.getValues().recipient}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Amount:</span>
+                    <span className="font-bold text-lg">₦10.00</span>
+                  </div>
+                </motion.div>
+                
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 1.2, type: "spring" }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <Button 
+                    onClick={resetForm}
+                    className="bg-gray-800 hover:bg-gray-700 text-white text-lg px-8 py-4 rounded-md transition-all flex items-center gap-2"
+                  >
+                    <Gift size={18} />
+                    <span>Send Another</span>
+                  </Button>
+                </motion.div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </CardContent>
       
-      <CardFooter className="border-t px-6 py-3 bg-gray-50 flex justify-center rounded-b-lg">
-        <p className="text-xs text-gray-500">
+      <CardFooter className="border-t px-8 py-4 bg-gray-50 flex justify-center">
+        <p className="text-sm text-gray-500">
           Thank you for your support.
         </p>
       </CardFooter>

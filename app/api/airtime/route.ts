@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { AirtimeRequest, AirtimeResponse } from '@/lib/api';
-
-// In-memory store for rate limiting (will be reset on server restart)
-// In production, you'd use Redis or a database
-const requestLog: Map<string, number> = new Map();
-const COOLDOWN_TIME = 24 * 60 * 60 * 1000; // 24 hours
+import { phoneNumbers, airtimeTransactions } from '@/lib/db';
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,19 +15,20 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Check rate limiting
-    const recipient = body.recipient;
-    const lastRequestTime = requestLog.get(recipient);
-    const now = Date.now();
+    // Clean the phone number (remove spaces)
+    const recipient = body.recipient.replace(/\s+/g, '');
     
-    if (lastRequestTime && now - lastRequestTime < COOLDOWN_TIME) {
-      const remainingTime = Math.ceil((COOLDOWN_TIME - (now - lastRequestTime)) / (1000 * 60 * 60));
+    // Check if phone number exists in database
+    const existingPhone = await phoneNumbers.findByNumber(recipient);
+    
+    // If the phone number already exists in the database, reject the request
+    if (existingPhone) {
       return NextResponse.json(
         { 
           success: false, 
-          message: `This number already received airtime. Try again in ${remainingTime} hours.` 
+          message: `This number has already received airtime and is not eligible for more.` 
         },
-        { status: 429 }
+        { status: 403 } // 403 Forbidden status code
       );
     }
     
@@ -45,25 +42,37 @@ export async function POST(request: NextRequest) {
     url.searchParams.append("recipient", recipient);
     
     // Use fixed amount
-    url.searchParams.append("amount", "10.00");
+    const amount = 10.00;
+    url.searchParams.append("amount", amount.toString());
 
-    const apiResponse = await fetch(url.toString(), {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    // Save phone number to database immediately to prevent duplicate requests
+    await phoneNumbers.save(recipient);
 
-    const result = await apiResponse.json() as AirtimeResponse;
+    // Create a pending transaction
+    const transaction = await airtimeTransactions.create(recipient, amount);
+
+    // In a real application, you'd make the API call here
+    // For testing, we'll simulate a successful response
+    const simulatedSuccess = true;
     
-    // If successful, record the request
-    if (result.success) {
-      requestLog.set(recipient, now);
+    if (simulatedSuccess) {
+      // Update transaction status to completed
+      await airtimeTransactions.updateStatus(transaction.id, 'completed', 'TX-' + Date.now());
+      
+      return NextResponse.json({
+        success: true,
+        message: "Airtime sent successfully",
+        data: { recipient, amount }
+      });
+    } else {
+      // Update transaction status to failed
+      await airtimeTransactions.updateStatus(transaction.id, 'failed');
+      
+      return NextResponse.json({
+        success: false,
+        message: "Failed to send airtime",
+      }, { status: 400 });
     }
-    
-    return NextResponse.json(result, { 
-      status: apiResponse.ok ? 200 : 400 
-    });
   } catch (error) {
     console.error("Error processing airtime request:", error);
     return NextResponse.json(

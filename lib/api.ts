@@ -1,3 +1,5 @@
+import fetch from 'cross-fetch';
+
 export interface AirtimeRequest {
   retailer: string;
   recipient: string;
@@ -10,8 +12,17 @@ export interface AirtimeResponse {
   transactionId?: string;
 }
 
+// Get API credentials from environment variables
+const getApiCredentials = () => ({
+  apiKey: process.env.API_KEY || '',
+  apiSecret: process.env.API_SECRET || ''
+});
+
 export async function sendAirtime(data: AirtimeRequest): Promise<AirtimeResponse> {
   try {
+    // Get credentials
+    const { apiKey, apiSecret } = getApiCredentials();
+    
     // Create the URL with query parameters
     const url = new URL("https://tppgh.myone4all.com/api/TopUpApi/airtime");
     
@@ -23,11 +34,17 @@ export async function sendAirtime(data: AirtimeRequest): Promise<AirtimeResponse
     
     // Use fixed amount instead of from data
     url.searchParams.append("amount", "10.00");
+    
+    // Add API credentials to request
+    url.searchParams.append("key", apiKey);
+    // Note: In a production environment, you might need to implement proper authentication
+    // using the secret (possibly for signing requests, etc.)
 
     const response = await fetch(url.toString(), {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiSecret}` // Example of using the secret for auth
       },
     });
 

@@ -1,74 +1,104 @@
 /**
+ * NOTE: This module is deprecated and no longer used in the application.
+ * 
+ * The application now uses database checks to permanently block numbers
+ * that have already received airtime, rather than a temporary cooldown period.
+ * 
+ * This file is kept for reference only.
+ */
+
+/**
  * Client-side request limiter to prevent multiple requests
  * from the same user within a specific time period
  */
 
-// Constants
-const COOLDOWN_PERIOD = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-const STORAGE_PREFIX = 'request_timestamp_';
+/**
+ * Storage adapter to allow working with both browser localStorage and tests
+ */
+const storage = {
+  getItem(key: string): string | null {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return window.localStorage.getItem(key);
+    }
+    // For tests or SSR
+    return (storage as any)._store?.[key] || null;
+  },
+  setItem(key: string, value: string): void {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(key, value);
+    } else {
+      // For tests or SSR
+      if (!(storage as any)._store) {
+        (storage as any)._store = {};
+      }
+      (storage as any)._store[key] = value;
+    }
+  },
+  _store: {} // In-memory storage for testing/SSR
+};
 
 /**
- * Check if a request can be made to the specified recipient
- * @param recipient The recipient identifier
- * @returns Boolean indicating if request can be made
+ * Time in milliseconds before another request can be made
+ * 24 hours = 24 * 60 * 60 * 1000 = 86400000 ms
+ */
+const COOLDOWN_PERIOD_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+/**
+ * Creates a storage key for a specific phone number
+ */
+function getStorageKey(recipient: string): string {
+  return `airtime_request_${recipient.replace(/\D/g, '')}`;
+}
+
+/**
+ * Check if a phone number can make a new request
+ * @returns true if allowed, false if too recent
  */
 export function canMakeRequest(recipient: string): boolean {
   const lastRequestTime = getLastRequestTime(recipient);
-  
-  // If no previous request or cooldown period has passed
-  if (!lastRequestTime) {
+  if (lastRequestTime === null) {
     return true;
   }
   
   const currentTime = Date.now();
-  const timeSinceLastRequest = currentTime - lastRequestTime;
+  const elapsedTime = currentTime - lastRequestTime;
   
-  return timeSinceLastRequest > COOLDOWN_PERIOD;
+  return elapsedTime >= COOLDOWN_PERIOD_MS;
 }
 
 /**
- * Records that a request has been made to the specified recipient
- * @param recipient The recipient identifier
+ * Records a successful request for a phone number
  */
 export function recordRequest(recipient: string): void {
   const currentTime = Date.now();
-  localStorage.setItem(getStorageKey(recipient), currentTime.toString());
+  storage.setItem(getStorageKey(recipient), currentTime.toString());
 }
 
 /**
  * Gets the remaining cooldown time in milliseconds
- * @param recipient The recipient identifier
- * @returns Remaining time in milliseconds, or 0 if no cooldown is active
+ * @returns milliseconds remaining, or 0 if no cooldown
  */
 export function getRemainingCooldownTime(recipient: string): number {
   const lastRequestTime = getLastRequestTime(recipient);
-  
-  if (!lastRequestTime) {
+  if (lastRequestTime === null) {
     return 0;
   }
   
   const currentTime = Date.now();
-  const timeSinceLastRequest = currentTime - lastRequestTime;
-  const remainingTime = COOLDOWN_PERIOD - timeSinceLastRequest;
+  const elapsedTime = currentTime - lastRequestTime;
   
-  return remainingTime > 0 ? remainingTime : 0;
+  if (elapsedTime >= COOLDOWN_PERIOD_MS) {
+    return 0;
+  }
+  
+  return COOLDOWN_PERIOD_MS - elapsedTime;
 }
 
 /**
- * Helper function to get the last request time
- * @param recipient The recipient identifier
- * @returns Timestamp of last request or null if no request was made
+ * Gets the timestamp of the last request for a phone number
+ * @returns timestamp in milliseconds, or null if no previous request
  */
 function getLastRequestTime(recipient: string): number | null {
-  const value = localStorage.getItem(getStorageKey(recipient));
+  const value = storage.getItem(getStorageKey(recipient));
   return value ? parseInt(value, 10) : null;
-}
-
-/**
- * Helper function to generate the storage key
- * @param recipient The recipient identifier
- * @returns The storage key
- */
-function getStorageKey(recipient: string): string {
-  return `${STORAGE_PREFIX}${recipient}`;
 }
