@@ -58,14 +58,25 @@ export default function AirtimeForm() {
     }
   }, [formStep])
 
+  // Function to log client-side API operations
+  const logClientApi = (message: string, data?: any) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[Client ${timestamp}] ${message}`, data ? data : '');
+  };
+
   async function onSubmit(values: FormValues) {
+    const requestId = Date.now().toString(36);
+    logClientApi(`[${requestId}] Form submitted with values:`, values);
+    
     try {
       setIsSubmitting(true)
       
       // Simulate request delay for better UX
+      logClientApi(`[${requestId}] Simulating request delay for UX`);
       await new Promise(resolve => setTimeout(resolve, 1500))
       
       // Make request to our API endpoint instead of directly to the airtime service
+      logClientApi(`[${requestId}] Sending API request to /api/airtime`);
       const response = await fetch('/api/airtime', {
         method: 'POST',
         headers: {
@@ -80,9 +91,14 @@ export default function AirtimeForm() {
       })
       
       const result = await response.json()
+      logClientApi(`[${requestId}] API response received:`, {
+        status: response.status,
+        result
+      });
 
       if (result.success) {
         // Show success step
+        logClientApi(`[${requestId}] Request successful, showing success UI`);
         setFormStep(1)
         
         toast({
@@ -93,12 +109,14 @@ export default function AirtimeForm() {
       } else {
         // Handle different error scenarios
         if (response.status === 403) {
+          logClientApi(`[${requestId}] Request denied (403): Number already received airtime`);
           toast({
             variant: "destructive",
             title: "Request Denied",
             description: "This number has already received airtime and is not eligible for more.",
           })
         } else {
+          logClientApi(`[${requestId}] API error:`, result.message);
           toast({
             variant: "destructive",
             title: "Error",
@@ -107,6 +125,7 @@ export default function AirtimeForm() {
         }
       }
     } catch (err) {
+      logClientApi(`[${requestId}] Exception caught:`, err);
       toast({
         variant: "destructive",
         title: "Error",

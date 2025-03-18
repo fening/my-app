@@ -3,12 +3,23 @@ import type { NextRequest } from 'next/server';
 import { AirtimeRequest, AirtimeResponse } from '@/lib/api';
 import { phoneNumbers, airtimeTransactions } from '@/lib/db';
 
+// Create a logger function
+const logApiRequest = (message: string, data?: any) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[API ${timestamp}] ${message}`, data ? data : '');
+};
+
 export async function POST(request: NextRequest) {
+  const requestId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+  logApiRequest(`[${requestId}] Received airtime request`);
+  
   try {
     const body = await request.json() as AirtimeRequest;
+    logApiRequest(`[${requestId}] Request body:`, body);
     
     // Validate the recipient
     if (!body.recipient || body.recipient.length < 10) {
+      logApiRequest(`[${requestId}] Invalid phone number: ${body.recipient}`);
       return NextResponse.json(
         { success: false, message: "Invalid phone number" },
         { status: 400 }
@@ -17,12 +28,14 @@ export async function POST(request: NextRequest) {
     
     // Clean the phone number (remove spaces)
     const recipient = body.recipient.replace(/\s+/g, '');
+    logApiRequest(`[${requestId}] Processing request for number: ${recipient}`);
     
     // Check if phone number exists in database
     const existingPhone = await phoneNumbers.findByNumber(recipient);
     
     // If the phone number already exists in the database, reject the request
     if (existingPhone) {
+      logApiRequest(`[${requestId}] Number already exists in database: ${recipient}`);
       return NextResponse.json(
         { 
           success: false, 
@@ -46,9 +59,11 @@ export async function POST(request: NextRequest) {
     url.searchParams.append("amount", amount.toString());
 
     // Save phone number to database immediately to prevent duplicate requests
+    logApiRequest(`[${requestId}] Saving phone number to database: ${recipient}`);
     await phoneNumbers.save(recipient);
 
     // Create a pending transaction
+    logApiRequest(`[${requestId}] Creating transaction for ${recipient}, amount: ${amount}`);
     const transaction = await airtimeTransactions.create(recipient, amount);
 
     // In a real application, you'd make the API call here
@@ -57,15 +72,20 @@ export async function POST(request: NextRequest) {
     
     if (simulatedSuccess) {
       // Update transaction status to completed
-      await airtimeTransactions.updateStatus(transaction.id, 'completed', 'TX-' + Date.now());
+      const txRef = 'TX-' + Date.now();
+      logApiRequest(`[${requestId}] Updating transaction to completed, ref: ${txRef}`);
+      await airtimeTransactions.updateStatus(transaction.id, 'completed', txRef);
       
-      return NextResponse.json({
+      const response = {
         success: true,
         message: "Airtime sent successfully",
         data: { recipient, amount }
-      });
+      };
+      logApiRequest(`[${requestId}] Success response:`, response);
+      return NextResponse.json(response);
     } else {
       // Update transaction status to failed
+      logApiRequest(`[${requestId}] Transaction failed`);
       await airtimeTransactions.updateStatus(transaction.id, 'failed');
       
       return NextResponse.json({
@@ -74,6 +94,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
   } catch (error) {
+    logApiRequest(`[${requestId}] Error processing request:`, error);
     console.error("Error processing airtime request:", error);
     return NextResponse.json(
       { 

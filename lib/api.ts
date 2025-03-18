@@ -18,7 +18,16 @@ const getApiCredentials = () => ({
   apiSecret: process.env.API_SECRET || ''
 });
 
+// Logger function for external API calls
+const logExternalApi = (message: string, data?: any) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[ExternalAPI ${timestamp}] ${message}`, data ? data : '');
+};
+
 export async function sendAirtime(data: AirtimeRequest): Promise<AirtimeResponse> {
+  const requestId = Date.now().toString(36);
+  logExternalApi(`[${requestId}] Starting airtime request for ${data.recipient}`);
+  
   try {
     // Get credentials
     const { apiKey, apiSecret } = getApiCredentials();
@@ -37,9 +46,8 @@ export async function sendAirtime(data: AirtimeRequest): Promise<AirtimeResponse
     
     // Add API credentials to request
     url.searchParams.append("key", apiKey);
-    // Note: In a production environment, you might need to implement proper authentication
-    // using the secret (possibly for signing requests, etc.)
 
+    logExternalApi(`[${requestId}] Sending request to external API:`, url.toString());
     const response = await fetch(url.toString(), {
       method: "GET",
       headers: {
@@ -48,8 +56,11 @@ export async function sendAirtime(data: AirtimeRequest): Promise<AirtimeResponse
       },
     });
 
+    logExternalApi(`[${requestId}] External API response status: ${response.status}`);
+    
     // Parse the JSON response regardless of status code
     const result = await response.json();
+    logExternalApi(`[${requestId}] External API response body:`, result);
     
     // If the response has a JSON structure, return it
     if (result) {
@@ -58,18 +69,22 @@ export async function sendAirtime(data: AirtimeRequest): Promise<AirtimeResponse
     
     // If no result from JSON parsing, handle based on status code
     if (!response.ok) {
+      const errorMsg = `HTTP error! Status: ${response.status}`;
+      logExternalApi(`[${requestId}] Error: ${errorMsg}`);
       return {
         success: false,
-        message: `HTTP error! Status: ${response.status}`,
+        message: errorMsg,
       };
     }
 
     // Fallback for unexpected cases
+    logExternalApi(`[${requestId}] Unknown response format`);
     return {
       success: false,
       message: "Unknown response format",
     };
   } catch (error) {
+    logExternalApi(`[${requestId}] Exception:`, error);
     console.error("Error sending airtime:", error);
     return {
       success: false,
