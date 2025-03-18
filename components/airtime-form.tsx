@@ -1,8 +1,9 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm as useHookForm, Controller } from "react-hook-form"
 import * as z from "zod"
+// Import React types
+import React from 'react'
 import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
@@ -12,7 +13,7 @@ import { Phone, CheckCircle2, Zap, Gift } from "lucide-react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { motion, AnimatePresence } from "framer-motion"
 
-// Updated schema to only include recipient field
+// Schema and type definitions
 const formSchema = z.object({
   recipient: z.string().min(10, {
     message: "Phone number must be at least 10 digits.",
@@ -22,24 +23,27 @@ const formSchema = z.object({
 // Use type for the form values
 type FormValues = z.infer<typeof formSchema>;
 
-// Add this type definition for your form
-type AirtimeFormValues = {
-  recipient: string;
-  // Add other form fields as needed
-};
+// Import react-hook-form directly (original import - only needed for types)
+import type { UseFormReturn, ControllerProps, FieldValues, ControllerRenderProps, ControllerFieldState, UseFormStateReturn } from "react-hook-form";
+
+// Dynamic import of the actual module functions
+// We use this to make it work at runtime
+const ReactHookForm = require('react-hook-form');
+const useForm = ReactHookForm.useForm;
+const Controller = ReactHookForm.Controller;
 
 export default function AirtimeForm() {
   const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formStep, setFormStep] = useState(0)
   
-  // Change useForm to useHookForm to match the import
-  const form = useHookForm<AirtimeFormValues>({
+  // Use useForm without generics - TypeScript will infer types
+  const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
       recipient: "",
     },
-  })
+  }) as UseFormReturn<FormValues>;  // Type assertion for TypeScript
 
   // State for confetti animation
   const [showConfetti, setShowConfetti] = useState(false)
@@ -169,7 +173,15 @@ export default function AirtimeForm() {
                     <Controller
                       control={form.control}
                       name="recipient"
-                      render={({ field, fieldState, formState }) => (
+                      render={({ 
+                        field, 
+                        fieldState, 
+                        formState 
+                      }: {
+                        field: ControllerRenderProps<FormValues, 'recipient'>;
+                        fieldState: ControllerFieldState;
+                        formState: UseFormStateReturn<FormValues>;
+                      }) => (
                         <FormItem>
                           <FormLabel className="text-lg font-medium">Phone Number</FormLabel>
                           <FormControl>

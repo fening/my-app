@@ -107,15 +107,18 @@ const airtimeTransactions = {
   }
 };
 
+// Define a named constant for the export
+const dbUtils = {
+  query: (text: string, params?: any[]) => pool.query(text, params),
+  phoneNumbers,
+  airtimeTransactions,
+  pool
+};
+
 export {
   pool,
   phoneNumbers,
   airtimeTransactions
 };
 
-export default {
-  query: (text: string, params?: any[]) => pool.query(text, params),
-  phoneNumbers,
-  airtimeTransactions,
-  pool
-};
+export default dbUtils;
