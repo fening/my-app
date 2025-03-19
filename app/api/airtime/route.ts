@@ -19,7 +19,6 @@ export async function POST(request: NextRequest) {
     
     // Validate the recipient
     if (!body.recipient || body.recipient.length < 10) {
-      logApiRequest(`[${requestId}] Invalid phone number: ${body.recipient}`);
       return NextResponse.json(
         { success: false, message: "Invalid phone number" },
         { status: 400 }
@@ -28,14 +27,12 @@ export async function POST(request: NextRequest) {
     
     // Clean the phone number (remove spaces)
     const recipient = body.recipient.replace(/\s+/g, '');
-    logApiRequest(`[${requestId}] Processing request for number: ${recipient}`);
     
     // Check if phone number exists in database
     const existingPhone = await phoneNumbers.findByNumber(recipient);
     
     // If the phone number already exists in the database, reject the request
     if (existingPhone) {
-      logApiRequest(`[${requestId}] Number already exists in database: ${recipient}`);
       return NextResponse.json(
         { 
           success: false, 
@@ -55,43 +52,71 @@ export async function POST(request: NextRequest) {
     url.searchParams.append("recipient", recipient);
     
     // Use fixed amount
-    const amount = 10.00;
+    const amount = 1.00;
     url.searchParams.append("amount", amount.toString());
 
     // Save phone number to database immediately to prevent duplicate requests
-    logApiRequest(`[${requestId}] Saving phone number to database: ${recipient}`);
     await phoneNumbers.save(recipient);
 
-    // Create a pending transaction
-    logApiRequest(`[${requestId}] Creating transaction for ${recipient}, amount: ${amount}`);
-    const transaction = await airtimeTransactions.create(recipient, amount);
+    try {
+      // Create a pending transaction
+      logApiRequest(`[${requestId}] Creating transaction for ${recipient}, amount: ${amount}`);
+      const transaction = await airtimeTransactions.create(recipient, amount);
 
-    // In a real application, you'd make the API call here
-    // For testing, we'll simulate a successful response
-    const simulatedSuccess = true;
-    
-    if (simulatedSuccess) {
-      // Update transaction status to completed
-      const txRef = 'TX-' + Date.now();
-      logApiRequest(`[${requestId}] Updating transaction to completed, ref: ${txRef}`);
-      await airtimeTransactions.updateStatus(transaction.id, 'completed', txRef);
+      // In a real application, you'd make the API call here
+      // For testing, we'll simulate a successful response
+      const simulatedSuccess = true;
       
-      const response = {
-        success: true,
-        message: "Airtime sent successfully",
-        data: { recipient, amount }
-      };
-      logApiRequest(`[${requestId}] Success response:`, response);
-      return NextResponse.json(response);
-    } else {
-      // Update transaction status to failed
-      logApiRequest(`[${requestId}] Transaction failed`);
-      await airtimeTransactions.updateStatus(transaction.id, 'failed');
+      if (simulatedSuccess) {
+        // Update transaction status to completed
+        const txRef = 'TX-' + Date.now().toString();
+        logApiRequest(`[${requestId}] Updating transaction to completed, ref: ${txRef}`);
+        try {
+          // Make sure we're passing a string literal that matches the expected enum values
+          const status: 'completed' = 'completed';
+          await airtimeTransactions.updateStatus(transaction.id, status, txRef);
+        } catch (error) {
+          logApiRequest(`[${requestId}] Error updating transaction status:`, error);
+          // Continue to provide successful response to user, but log the error
+        }
+        
+        return NextResponse.json({
+          success: true,
+          message: "Airtime sent successfully",
+          data: { recipient, amount }
+        });
+      } else {
+        // Update transaction status to failed
+        logApiRequest(`[${requestId}] Transaction failed`);
+        try {
+          // Make sure we're passing a string literal that matches the expected enum values
+          const status: 'failed' = 'failed';
+          await airtimeTransactions.updateStatus(transaction.id, status, null);
+        } catch (error) {
+          logApiRequest(`[${requestId}] Error updating transaction status:`, error);
+        }
+        
+        return NextResponse.json({
+          success: false,
+          message: "Failed to send airtime",
+        }, { status: 400 });
+      }
+    } catch (dbError: any) {
+      // Check for specific database errors
+      if (dbError.code === '42P01') { // Relation does not exist
+        logApiRequest(`[${requestId}] Database tables not set up properly. Run setup-db.js script.`);
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Database not configured. Please run setup script.",
+            error: "DATABASE_NOT_CONFIGURED"
+          },
+          { status: 500 }
+        );
+      }
       
-      return NextResponse.json({
-        success: false,
-        message: "Failed to send airtime",
-      }, { status: 400 });
+      // Re-throw other errors
+      throw dbError;
     }
   } catch (error) {
     logApiRequest(`[${requestId}] Error processing request:`, error);

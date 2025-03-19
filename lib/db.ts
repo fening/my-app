@@ -27,10 +27,53 @@ export interface AirtimeTransaction {
   processed_at?: Date;
 }
 
-// Create a singleton database connection pool
-const pool = new Pool({
+// Determine if this is a localhost connection
+const isLocalhost = process.env.POSTGRES_HOST === 'localhost' || 
+                    process.env.POSTGRES_HOST === '127.0.0.1' ||
+                    (process.env.DATABASE_URL || '').includes('localhost') ||
+                    (process.env.DATABASE_URL || '').includes('127.0.0.1');
+
+// Determine if SSL should be explicitly disabled
+const disableSSL = isLocalhost || process.env.POSTGRES_SSL === 'false';
+
+// Configure PostgreSQL connection options
+const dbConfig = {
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: disableSSL ? false : 
+      (process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false)
+};
+
+console.log(`[DB] Connection info:`, {
+  host: process.env.POSTGRES_HOST,
+  isLocalhost,
+  sslEnabled: dbConfig.ssl !== false,
+  nodeEnv: process.env.NODE_ENV
+});
+
+// Create a singleton database connection pool
+const pool = new Pool(dbConfig);
+
+// Test the connection
+pool.query('SELECT NOW()')
+  .then(() => console.log('[DB] Database connection successful'))
+  .catch(err => {
+    console.error('[DB] Database connection error:', err);
+    // If SSL is the issue, try reconnecting without SSL
+    if (err.message.includes('SSL') && !disableSSL) {
+      console.log('[DB] Attempting to reconnect without SSL...');
+      // Update the pool's SSL config
+      (pool as any).options.ssl = false;
+    }
+  });
+
+// Add error handler for connection issues
+pool.on('error', (err) => {
+  console.error('[DB] Unexpected error on PostgreSQL client:', err);
+  
+  // Handle SSL-specific errors
+  if (err.message.includes('SSL')) {
+    console.error('[DB] SSL error detected. Please set POSTGRES_SSL=false in your .env file');
+  }
 });
 
 /**
@@ -83,18 +126,41 @@ const airtimeTransactions = {
   },
   
   // Update transaction status
-  async updateStatus(id: number, status: AirtimeTransaction['status'], transactionRef?: string): Promise<AirtimeTransaction | null> {
+  async updateStatus(id: number, status: AirtimeTransaction['status'], transactionRef?: string | null): Promise<AirtimeTransaction | null> {
+    // Instead of using parameterized query with type issues, build a safer hardcoded query
+    // This avoids the parameter type inference issues with PostgreSQL
+    
+    // Validate status to prevent SQL injection
+    const validStatuses = ['pending', 'completed', 'failed', 'cancelled'];
+    const statusStr = String(status);
+    
+    if (!validStatuses.includes(statusStr)) {
+      throw new Error(`Invalid status: ${statusStr}. Must be one of: ${validStatuses.join(', ')}`);
+    }
+    
+    // Process transaction reference
+    const txRef = transactionRef === undefined ? null : String(transactionRef);
+    const txRefValue = txRef === null ? 'NULL' : `'${txRef.replace(/'/g, "''")}'`; // Escape single quotes
+    
+    // Build a safe query with explicit types
     const query = `
       UPDATE airtime_transactions
-      SET status = $2, 
-          transaction_reference = COALESCE($3, transaction_reference),
-          processed_at = CASE WHEN $2 IN ('completed', 'failed') THEN NOW() ELSE processed_at END
-      WHERE id = $1
+      SET status = '${statusStr}'::varchar, 
+          transaction_reference = COALESCE(${txRefValue}, transaction_reference),
+          processed_at = CASE WHEN '${statusStr}'::varchar IN ('completed', 'failed') THEN NOW() ELSE processed_at END
+      WHERE id = ${id}
       RETURNING *
     `;
     
-    const result = await pool.query(query, [id, status, transactionRef]);
-    return result.rows[0] || null;
+    console.log(`[DB] Updating transaction ${id} status to "${statusStr}", ref: ${txRefValue}`);
+    
+    try {
+      const result = await pool.query(query);
+      return result.rows[0] || null;
+    } catch (error) {
+      console.error("[DB] Error in updateStatus:", error);
+      throw error;
+    }
   },
   
   // Get all transactions for a phone number

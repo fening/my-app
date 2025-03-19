@@ -1,9 +1,8 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
+import { useForm as useHookForm, Controller } from "react-hook-form"
 import * as z from "zod"
-// Import React types
-import React from 'react'
 import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
@@ -13,7 +12,7 @@ import { Phone, CheckCircle2, Zap, Gift } from "lucide-react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { motion, AnimatePresence } from "framer-motion"
 
-// Schema and type definitions
+// Updated schema to only include recipient field
 const formSchema = z.object({
   recipient: z.string().min(10, {
     message: "Phone number must be at least 10 digits.",
@@ -23,27 +22,24 @@ const formSchema = z.object({
 // Use type for the form values
 type FormValues = z.infer<typeof formSchema>;
 
-// Import react-hook-form directly (original import - only needed for types)
-import type { UseFormReturn, ControllerProps, FieldValues, ControllerRenderProps, ControllerFieldState, UseFormStateReturn } from "react-hook-form";
-
-// Dynamic import of the actual module functions
-// We use this to make it work at runtime
-const ReactHookForm = require('react-hook-form');
-const useForm = ReactHookForm.useForm;
-const Controller = ReactHookForm.Controller;
+// Add this type definition for your form
+type AirtimeFormValues = {
+  recipient: string;
+  // Add other form fields as needed
+};
 
 export default function AirtimeForm() {
   const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formStep, setFormStep] = useState(0)
   
-  // Use useForm without generics - TypeScript will infer types
-  const form = useForm({
+  // Change useForm to useHookForm to match the import
+  const form = useHookForm<AirtimeFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       recipient: "",
     },
-  }) as UseFormReturn<FormValues>;  // Type assertion for TypeScript
+  })
 
   // State for confetti animation
   const [showConfetti, setShowConfetti] = useState(false)
@@ -58,25 +54,14 @@ export default function AirtimeForm() {
     }
   }, [formStep])
 
-  // Function to log client-side API operations
-  const logClientApi = (message: string, data?: any) => {
-    const timestamp = new Date().toISOString();
-    console.log(`[Client ${timestamp}] ${message}`, data ? data : '');
-  };
-
   async function onSubmit(values: FormValues) {
-    const requestId = Date.now().toString(36);
-    logClientApi(`[${requestId}] Form submitted with values:`, values);
-    
     try {
       setIsSubmitting(true)
       
       // Simulate request delay for better UX
-      logClientApi(`[${requestId}] Simulating request delay for UX`);
       await new Promise(resolve => setTimeout(resolve, 1500))
       
       // Make request to our API endpoint instead of directly to the airtime service
-      logClientApi(`[${requestId}] Sending API request to /api/airtime`);
       const response = await fetch('/api/airtime', {
         method: 'POST',
         headers: {
@@ -91,14 +76,9 @@ export default function AirtimeForm() {
       })
       
       const result = await response.json()
-      logClientApi(`[${requestId}] API response received:`, {
-        status: response.status,
-        result
-      });
 
       if (result.success) {
         // Show success step
-        logClientApi(`[${requestId}] Request successful, showing success UI`);
         setFormStep(1)
         
         toast({
@@ -109,14 +89,12 @@ export default function AirtimeForm() {
       } else {
         // Handle different error scenarios
         if (response.status === 403) {
-          logClientApi(`[${requestId}] Request denied (403): Number already received airtime`);
           toast({
             variant: "destructive",
             title: "Request Denied",
             description: "This number has already received airtime and is not eligible for more.",
           })
         } else {
-          logClientApi(`[${requestId}] API error:`, result.message);
           toast({
             variant: "destructive",
             title: "Error",
@@ -125,7 +103,6 @@ export default function AirtimeForm() {
         }
       }
     } catch (err) {
-      logClientApi(`[${requestId}] Exception caught:`, err);
       toast({
         variant: "destructive",
         title: "Error",
@@ -169,7 +146,7 @@ export default function AirtimeForm() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <CardTitle className="text-3xl font-bold text-center mb-2">Receive your free airtime</CardTitle>
+          <CardTitle className="text-3xl font-bold text-center mb-2">Send Airtime</CardTitle>
           <CardDescription className="text-gray-500 text-center text-lg">
             Enter a phone number to receive free airtime
           </CardDescription>
@@ -192,15 +169,7 @@ export default function AirtimeForm() {
                     <Controller
                       control={form.control}
                       name="recipient"
-                      render={({ 
-                        field, 
-                        fieldState, 
-                        formState 
-                      }: {
-                        field: ControllerRenderProps<FormValues, 'recipient'>;
-                        fieldState: ControllerFieldState;
-                        formState: UseFormStateReturn<FormValues>;
-                      }) => (
+                      render={({ field, fieldState, formState }) => (
                         <FormItem>
                           <FormLabel className="text-lg font-medium">Phone Number</FormLabel>
                           <FormControl>
@@ -219,7 +188,7 @@ export default function AirtimeForm() {
                             </div>
                           </FormControl>
                           <FormDescription className="text-base text-gray-500">
-                            You can receive this airtime only once
+                            Enter the phone number to receive the airtime
                           </FormDescription>
                           <FormMessage className="text-base" />
                         </FormItem>
@@ -340,24 +309,8 @@ export default function AirtimeForm() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-gray-500">Amount:</span>
-                    <span className="font-bold text-lg">₦10.00</span>
+                    <span className="font-bold text-lg">GH₵10.00</span>
                   </div>
-                </motion.div>
-                
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 1.2, type: "spring" }}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <Button 
-                    onClick={resetForm}
-                    className="bg-gray-800 hover:bg-gray-700 text-white text-lg px-8 py-4 rounded-md transition-all flex items-center gap-2"
-                  >
-                    <Gift size={18} />
-                    <span>Send Another</span>
-                  </Button>
                 </motion.div>
               </div>
             </motion.div>
