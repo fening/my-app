@@ -134,25 +134,26 @@ const airtimeTransactions = {
     if (!validStatuses.includes(statusStr)) {
       throw new Error(`Invalid status: ${statusStr}. Must be one of: ${validStatuses.join(', ')}`);
     }
-    
-    // Process transaction reference
-    const txRef = transactionRef === undefined ? null : String(transactionRef);
-    const txRefValue = txRef === null ? 'NULL' : `'${txRef.replace(/'/g, "''")}'`; // Escape single quotes
-    
-    // Build a safe query with explicit transaction_status enum cast
+
+    // Use parameterized query with explicit type casting
     const query = `
       UPDATE airtime_transactions
-      SET status = '${statusStr}'::transaction_status, 
-          transaction_reference = COALESCE(${txRefValue}, transaction_reference),
-          processed_at = CASE WHEN '${statusStr}'::transaction_status IN ('completed', 'failed') THEN NOW() ELSE processed_at END
-      WHERE id = ${id}
+      SET 
+        status = ($2)::text::transaction_status,
+        transaction_reference = COALESCE($3, transaction_reference),
+        processed_at = CASE 
+          WHEN ($2)::text::transaction_status IN ('completed', 'failed') 
+          THEN NOW() 
+          ELSE processed_at 
+        END
+      WHERE id = $1
       RETURNING *
     `;
     
-    console.log(`[DB] Updating transaction ${id} status to "${statusStr}", ref: ${txRefValue}`);
+    console.log(`[DB] Updating transaction ${id} status to "${statusStr}", ref: ${transactionRef}`);
     
     try {
-      const result = await pool.query(query);
+      const result = await pool.query(query, [id, statusStr, transactionRef]);
       return result.rows[0] || null;
     } catch (error) {
       console.error("[DB] Error in updateStatus:", error);
