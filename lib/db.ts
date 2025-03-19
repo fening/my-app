@@ -127,9 +127,6 @@ const airtimeTransactions = {
   
   // Update transaction status
   async updateStatus(id: number, status: AirtimeTransaction['status'], transactionRef?: string | null): Promise<AirtimeTransaction | null> {
-    // Instead of using parameterized query with type issues, build a safer hardcoded query
-    // This avoids the parameter type inference issues with PostgreSQL
-    
     // Validate status to prevent SQL injection
     const validStatuses = ['pending', 'completed', 'failed', 'cancelled'];
     const statusStr = String(status);
@@ -142,12 +139,12 @@ const airtimeTransactions = {
     const txRef = transactionRef === undefined ? null : String(transactionRef);
     const txRefValue = txRef === null ? 'NULL' : `'${txRef.replace(/'/g, "''")}'`; // Escape single quotes
     
-    // Build a safe query with explicit types
+    // Build a safe query with explicit transaction_status enum cast
     const query = `
       UPDATE airtime_transactions
-      SET status = '${statusStr}'::varchar, 
+      SET status = '${statusStr}'::transaction_status, 
           transaction_reference = COALESCE(${txRefValue}, transaction_reference),
-          processed_at = CASE WHEN '${statusStr}'::varchar IN ('completed', 'failed') THEN NOW() ELSE processed_at END
+          processed_at = CASE WHEN '${statusStr}'::transaction_status IN ('completed', 'failed') THEN NOW() ELSE processed_at END
       WHERE id = ${id}
       RETURNING *
     `;
