@@ -63,43 +63,84 @@ export async function POST(request: NextRequest) {
       logApiRequest(`[${requestId}] Creating transaction for ${recipient}, amount: ${amount}`);
       const transaction = await airtimeTransactions.create(recipient, amount);
 
-      // In a real application, you'd make the API call here
-      // For testing, we'll simulate a successful response
-      const simulatedSuccess = true;
-      
-      if (simulatedSuccess) {
-        // Update transaction status to completed
+      if (process.env.NODE_ENV === 'development') {
+        // Development mode: Simulate successful response
         const txRef = 'TX-' + Date.now().toString();
-        logApiRequest(`[${requestId}] Updating transaction to completed, ref: ${txRef}`);
+        logApiRequest(`[${requestId}] Development mode - simulating successful transaction`);
+        
         try {
-          // Make sure we're passing a string literal that matches the expected enum values
           const status: 'completed' = 'completed';
           await airtimeTransactions.updateStatus(transaction.id, status, txRef);
         } catch (error) {
           logApiRequest(`[${requestId}] Error updating transaction status:`, error);
-          // Continue to provide successful response to user, but log the error
         }
         
         return NextResponse.json({
           success: true,
-          message: "Airtime sent successfully",
-          data: { recipient, amount }
+          message: "Airtime sent successfully (Development Mode)",
+          data: { recipient, amount, reference: txRef }
         });
       } else {
-        // Update transaction status to failed
-        logApiRequest(`[${requestId}] Transaction failed`);
-        try {
-          // Make sure we're passing a string literal that matches the expected enum values
-          const status: 'failed' = 'failed';
-          await airtimeTransactions.updateStatus(transaction.id, status, null);
-        } catch (error) {
-          logApiRequest(`[${requestId}] Error updating transaction status:`, error);
-        }
+        // Production mode: Make actual API call
+        const url = new URL("https://tppgh.myone4all.com/api/TopUpApi/sendAirtime");
+        const transactionRef = 'TX-' + Date.now().toString();
+
+        // Prepare request body according to MyOne4All API spec
+        const apiRequestBody = {
+          phoneNumber: recipient,
+          amount: amount,
+          transactionId: transactionRef,
+          networkCode: "0" // 0 means auto-detect network
+        };
+
+        logApiRequest(`[${requestId}] Production mode - calling MyOne4All API`, apiRequestBody);
         
-        return NextResponse.json({
-          success: false,
-          message: "Failed to send airtime",
-        }, { status: 400 });
+        const response = await fetch(url.toString(), {
+          method: 'POST',
+          headers: {
+            'Authorization': `ApiKey ${process.env.API_KEY}:${process.env.API_SECRET}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(apiRequestBody)
+        });
+
+        const result = await response.json();
+        
+        if (response.ok && result.status === "SUCCESS") {
+          logApiRequest(`[${requestId}] MyOne4All API call successful:`, result);
+          try {
+            const status: 'completed' = 'completed';
+            await airtimeTransactions.updateStatus(transaction.id, status, result.transactionId || transactionRef);
+          } catch (error) {
+            logApiRequest(`[${requestId}] Error updating transaction status:`, error);
+          }
+          
+          return NextResponse.json({
+            success: true,
+            message: "Airtime sent successfully",
+            data: { 
+              recipient, 
+              amount, 
+              reference: result.transactionId || transactionRef,
+              network: result.network,
+              balance: result.balance
+            }
+          });
+        } else {
+          logApiRequest(`[${requestId}] MyOne4All API call failed:`, result);
+          try {
+            const status: 'failed' = 'failed';
+            await airtimeTransactions.updateStatus(transaction.id, status, null);
+          } catch (error) {
+            logApiRequest(`[${requestId}] Error updating transaction status:`, error);
+          }
+          
+          return NextResponse.json({
+            success: false,
+            message: result.message || "Failed to send airtime",
+            error: result.errorCode || 'UNKNOWN_ERROR'
+          }, { status: 400 });
+        }
       }
     } catch (dbError: any) {
       // Check for specific database errors
