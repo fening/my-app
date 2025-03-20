@@ -119,7 +119,7 @@ export default function AirtimeForm() {
     setFormStep(0)
   }
 
-  // Format phone number as user types - updated to add leading zero and format with spaces
+  // Format phone number as user types - updated to match 024 310 2276 pattern
   function formatPhoneNumber(value: string) {
     // Remove all non-digits
     let digits = value.replace(/\D/g, '')
@@ -130,12 +130,12 @@ export default function AirtimeForm() {
     }
     
     // Apply formatting based on length
-    if (digits.length <= 4) {
+    if (digits.length <= 3) {
       return digits
-    } else if (digits.length <= 7) {
-      return `${digits.slice(0, 4)} ${digits.slice(4)}`
+    } else if (digits.length <= 6) {
+      return `${digits.slice(0, 3)} ${digits.slice(3)}`
     } else {
-      return `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`
+      return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 10)}`
     }
   }
 
@@ -176,16 +176,17 @@ export default function AirtimeForm() {
                           <FormControl>
                             <div className="relative">
                               <Phone className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500 h-5 w-5" />
-                              <Input
+                                <Input
                                 placeholder="Enter phone number"
-                                className="pl-12 h-16 text-xl rounded-md border-gray-300 focus:border-gray-500 focus:ring-gray-500 shadow-sm"
+                                className="pl-12 h-20 font-semibold rounded-md border-gray-300 focus:border-gray-500 focus:ring-gray-500 shadow-sm"
+                                style={{ fontSize: '24px' }}  // or any custom size you want
                                 {...field}
                                 onChange={e => {
                                   const formatted = formatPhoneNumber(e.target.value)
                                   field.onChange(formatted)
                                 }}
                                 disabled={isSubmitting}
-                              />
+                              />  
                             </div>
                           </FormControl>
                           <FormDescription className="text-base text-gray-500">
