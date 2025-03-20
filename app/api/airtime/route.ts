@@ -92,38 +92,62 @@ export async function POST(request: NextRequest) {
         });
       } else {
         // Production mode: Make actual API call
-        const url = new URL("http://tppgh.myone4all.com/api/TopUpApi/sendAirtime");
+        const url = new URL("https://tppgh.myone4all.com/api/TopUpApi/airtime");
         const transactionRef = 'TX-' + Date.now().toString();
 
-        // Prepare request body according to MyOne4All API spec
-        const apiRequestBody = {
-          phoneNumber: recipient,
-          amount: amount,
-          transactionId: transactionRef,
-          networkCode: "0" // 0 means auto-detect network
+        // Add query parameters according to the API spec
+        const params = {
+          retailer: process.env.API_KEY || '',
+          recipient,
+          amount: amount.toString(),
+          network: "0", // Auto detect
+          trxn: transactionRef
         };
+
+        // Build query string the same way as PHP
+        url.search = new URLSearchParams(params).toString();
 
         logApiRequest(`[${requestId}] Production mode - calling MyOne4All API`, {
           url: url.toString(),
-          body: apiRequestBody,
-          headers: {
-            'Authorization': 'ApiKey [REDACTED]',
-            'Content-Type': 'application/json'
+          params: {
+            ...params,
+            retailer: '[REDACTED]'
           }
         });
         
         const response = await fetch(url.toString(), {
-          method: 'POST',
+          method: 'GET',
           headers: {
-            'Authorization': `ApiKey ${process.env.API_KEY}:${process.env.API_SECRET}`,
-            'Content-Type': 'application/json'
+            'ApiKey': process.env.API_KEY || '',
+            'ApiSecret': process.env.API_SECRET || '',
+            'User-Agent': 'TppMyOne4All Node.js Library',
+            'Accept': 'application/json'
           },
-          body: JSON.stringify(apiRequestBody)
+          // Disable SSL verification as in PHP client
+          //@ts-ignore - Next.js fetch doesn't support this option, but node-fetch does
+          rejectUnauthorized: false
+        });
+
+        // Log response status and headers for debugging
+        logApiRequest(`[${requestId}] API Response Status:`, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries())
         });
 
         // Log the raw response for debugging
         const responseText = await response.text();
         logApiRequest(`[${requestId}] Raw API response:`, responseText);
+
+        // If we got a 404, log it clearly
+        if (response.status === 404) {
+          logApiRequest(`[${requestId}] API endpoint not found (404)`);
+          return NextResponse.json({
+            success: false,
+            message: "Airtime provider API endpoint not found",
+            error: "ENDPOINT_NOT_FOUND"
+          }, { status: 404 });
+        }
 
         let result;
         try {
@@ -138,24 +162,49 @@ export async function POST(request: NextRequest) {
           }, { status: 502 });
         }
         
-        if (response.ok && result.status === "SUCCESS") {
+        // Check if the response is successful (status-code === "00" and not pending)
+        const isSuccessful = result['status-code'] === "00" && !result.pending;
+        const isPending = result.pending === true;
+        
+        if (isSuccessful) {
           logApiRequest(`[${requestId}] MyOne4All API call successful:`, result);
           try {
             const status: 'completed' = 'completed';
-            await airtimeTransactions.updateStatus(transaction.id, status, result.transactionId || transactionRef);
+            await airtimeTransactions.updateStatus(transaction.id, status, transactionRef);
           } catch (error) {
             logApiRequest(`[${requestId}] Error updating transaction status:`, error);
           }
           
           return NextResponse.json({
             success: true,
-            message: "Airtime sent successfully",
+            message: result.message || "Airtime sent successfully",
             data: { 
               recipient, 
               amount, 
-              reference: result.transactionId || transactionRef,
-              network: result.network,
-              balance: result.balance
+              reference: transactionRef,
+              balance: {
+                before: result.balance_before,
+                after: result.balance_after
+              }
+            }
+          });
+        } else if (isPending) {
+          logApiRequest(`[${requestId}] MyOne4All API call pending:`, result);
+          try {
+            const status: 'pending' = 'pending';
+            await airtimeTransactions.updateStatus(transaction.id, status, transactionRef);
+          } catch (error) {
+            logApiRequest(`[${requestId}] Error updating transaction status:`, error);
+          }
+          
+          return NextResponse.json({
+            success: true,
+            message: result.message || "Airtime request is pending",
+            data: { 
+              recipient, 
+              amount, 
+              reference: transactionRef,
+              status: 'pending'
             }
           });
         } else {
@@ -170,7 +219,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({
             success: false,
             message: result.message || "Failed to send airtime",
-            error: result.errorCode || 'UNKNOWN_ERROR'
+            error: result['status-code'] || 'UNKNOWN_ERROR'
           }, { status: 400 });
         }
       }
