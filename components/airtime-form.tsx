@@ -32,6 +32,8 @@ export default function AirtimeForm() {
   const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formStep, setFormStep] = useState(0)
+  const [showConfetti, setShowConfetti] = useState(false)
+  const [transactionData, setTransactionData] = useState<{ amount: number } | null>(null)
   
   // Change useForm to useHookForm to match the import
   const form = useHookForm<AirtimeFormValues>({
@@ -41,9 +43,6 @@ export default function AirtimeForm() {
     },
   })
 
-  // State for confetti animation
-  const [showConfetti, setShowConfetti] = useState(false)
-  
   // Show confetti when success screen appears
   useEffect(() => {
     if (formStep === 1) {
@@ -78,6 +77,8 @@ export default function AirtimeForm() {
       const result = await response.json()
 
       if (result.success) {
+        // Store the transaction data
+        setTransactionData(result.data)
         // Show success step
         setFormStep(1)
         
@@ -309,7 +310,7 @@ export default function AirtimeForm() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-gray-500">Amount:</span>
-                    <span className="font-bold text-lg">GH₵10.00</span>
+                    <span className="font-bold text-lg">GH₵{transactionData?.amount.toFixed(2) || '0.00'}</span>
                   </div>
                 </motion.div>
               </div>
