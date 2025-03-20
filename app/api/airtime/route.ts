@@ -62,16 +62,15 @@ export async function POST(request: NextRequest) {
     url.searchParams.append("recipient", recipient);
     
     // Use fixed amount
-    const amount = 1.00;
-    url.searchParams.append("amount", amount.toString());
-
+    const FIXED_AMOUNT = 1.00;  // Fixed amount in GHS
+    
     // Save phone number to database immediately to prevent duplicate requests
     await phoneNumbers.save(recipient);
 
     try {
       // Create a pending transaction
-      logApiRequest(`[${requestId}] Creating transaction for ${recipient}, amount: ${amount}`);
-      const transaction = await airtimeTransactions.create(recipient, amount);
+      logApiRequest(`[${requestId}] Creating transaction for ${recipient}, amount: ${FIXED_AMOUNT}`);
+      const transaction = await airtimeTransactions.create(recipient, FIXED_AMOUNT);
 
       if (process.env.NODE_ENV === 'development') {
         // Development mode: Simulate successful response
@@ -88,7 +87,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           success: true,
           message: "Airtime sent successfully (Development Mode)",
-          data: { recipient, amount, reference: txRef }
+          data: { 
+            recipient, 
+            amount: FIXED_AMOUNT, 
+            reference: txRef 
+          }
         });
       } else {
         // Production mode: Make actual API call
@@ -99,7 +102,7 @@ export async function POST(request: NextRequest) {
         const params = {
           retailer: process.env.API_KEY || '',
           recipient,
-          amount: amount.toString(),
+          amount: FIXED_AMOUNT.toString(),
           network: "0", // Auto detect
           trxn: transactionRef
         };
@@ -180,7 +183,7 @@ export async function POST(request: NextRequest) {
             message: result.message || "Airtime sent successfully",
             data: { 
               recipient, 
-              amount, 
+              amount: FIXED_AMOUNT, 
               reference: transactionRef,
               balance: {
                 before: result.balance_before,
@@ -202,7 +205,7 @@ export async function POST(request: NextRequest) {
             message: result.message || "Airtime request is pending",
             data: { 
               recipient, 
-              amount, 
+              amount: FIXED_AMOUNT, 
               reference: transactionRef,
               status: 'pending'
             }
