@@ -8,6 +8,15 @@ dotenv.config({
     : '.env.development'
 });
 
+// Ensure required environment variables are set
+const requiredEnvVars = ['DATABASE_URL', 'POSTGRES_HOST', 'POSTGRES_PORT', 'POSTGRES_USER', 'POSTGRES_PASSWORD', 'POSTGRES_DB'];
+for (const envVar of requiredEnvVars) {
+  if (!process.env[envVar]) {
+    console.error(`[DB] Missing required environment variable: ${envVar}`);
+    process.exit(1);
+  }
+}
+
 // Type definitions
 export interface PhoneNumberRecord {
   id: number;
@@ -38,13 +47,20 @@ const disableSSL = isLocalhost || process.env.POSTGRES_SSL === 'false';
 
 // Configure PostgreSQL connection options
 const dbConfig = {
-  connectionString: process.env.DATABASE_URL,
+  host: process.env.POSTGRES_HOST,
+  port: parseInt(process.env.POSTGRES_PORT || '5432'),
+  user: process.env.POSTGRES_USER,
+  password: process.env.POSTGRES_PASSWORD,
+  database: process.env.POSTGRES_DB,
   ssl: disableSSL ? false : 
       (process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false)
 };
 
 console.log(`[DB] Connection info:`, {
-  host: process.env.POSTGRES_HOST,
+  host: dbConfig.host,
+  port: dbConfig.port,
+  user: dbConfig.user,
+  database: dbConfig.database,
   isLocalhost,
   sslEnabled: dbConfig.ssl !== false,
   nodeEnv: process.env.NODE_ENV
@@ -72,7 +88,7 @@ pool.on('error', (err) => {
   
   // Handle SSL-specific errors
   if (err.message.includes('SSL')) {
-    console.error('[DB] SSL error detected. Please set POSTGRES_SSL=false in your .env file');
+    console.error('[DB] SSL error detected. Please check your SSL configuration');
   }
 });
 
