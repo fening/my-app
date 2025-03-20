@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
         });
       } else {
         // Production mode: Make actual API call
-        const url = new URL("https://tppgh.myone4all.com/api/TopUpApi/sendAirtime");
+        const url = new URL("http://tppgh.myone4all.com/api/TopUpApi/sendAirtime");
         const transactionRef = 'TX-' + Date.now().toString();
 
         // Prepare request body according to MyOne4All API spec
@@ -93,7 +93,14 @@ export async function POST(request: NextRequest) {
           networkCode: "0" // 0 means auto-detect network
         };
 
-        logApiRequest(`[${requestId}] Production mode - calling MyOne4All API`, apiRequestBody);
+        logApiRequest(`[${requestId}] Production mode - calling MyOne4All API`, {
+          url: url.toString(),
+          body: apiRequestBody,
+          headers: {
+            'Authorization': 'ApiKey [REDACTED]',
+            'Content-Type': 'application/json'
+          }
+        });
         
         const response = await fetch(url.toString(), {
           method: 'POST',
@@ -104,7 +111,22 @@ export async function POST(request: NextRequest) {
           body: JSON.stringify(apiRequestBody)
         });
 
-        const result = await response.json();
+        // Log the raw response for debugging
+        const responseText = await response.text();
+        logApiRequest(`[${requestId}] Raw API response:`, responseText);
+
+        let result;
+        try {
+          result = JSON.parse(responseText);
+        } catch (e) {
+          logApiRequest(`[${requestId}] Failed to parse API response as JSON:`, e);
+          return NextResponse.json({
+            success: false,
+            message: "Invalid response from airtime provider",
+            error: "INVALID_RESPONSE",
+            details: responseText.substring(0, 500) // First 500 chars of response for debugging
+          }, { status: 502 });
+        }
         
         if (response.ok && result.status === "SUCCESS") {
           logApiRequest(`[${requestId}] MyOne4All API call successful:`, result);
