@@ -2,6 +2,16 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { AirtimeRequest, AirtimeResponse } from '@/lib/api';
 import { phoneNumbers, airtimeTransactions } from '@/lib/db';
+import dotenv from 'dotenv';
+
+// Load environment variables based on environment
+if (process.env.NODE_ENV === 'production') {
+  // In production, load from /etc/app.env.production
+  dotenv.config({ path: '/etc/app.env.production' });
+} else {
+  // In development, load from local .env.development
+  dotenv.config({ path: '.env.development' });
+}
 
 // Create a logger function
 const logApiRequest = (message: string, data?: any) => {

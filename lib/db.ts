@@ -1,12 +1,15 @@
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
+import path from 'path';
 
 // Load environment variables based on environment
-dotenv.config({
-  path: process.env.NODE_ENV === 'production' 
-    ? '.env.production' 
-    : '.env.development'
-});
+if (process.env.NODE_ENV === 'production') {
+  // In production, load from /etc/app.env.production
+  dotenv.config({ path: '/etc/app.env.production' });
+} else {
+  // In development, load from local .env.development
+  dotenv.config({ path: '.env.development' });
+}
 
 // Ensure required environment variables are set
 const requiredEnvVars = ['DATABASE_URL', 'POSTGRES_HOST', 'POSTGRES_PORT', 'POSTGRES_USER', 'POSTGRES_PASSWORD', 'POSTGRES_DB'];
